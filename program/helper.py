@@ -1,3 +1,5 @@
+## Some stuff in here is irrelevent for this project.  This is a collection of convenience commands I use across many projects.
+
 import os
 import time
 from copy import copy as copy
