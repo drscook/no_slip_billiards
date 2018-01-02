@@ -1,5 +1,3 @@
-[![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/drscook/no_slip_billiards/mybinder_friendly)
-
 # no_slip_billiards
 
 This program simulates the no-slip billiard dynamical systems introduced by Groomhead and Gutkin and extended by Chris Cox and Renato Feres
