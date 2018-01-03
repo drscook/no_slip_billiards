@@ -3,6 +3,7 @@ from helper import *
 #from ipywidgets import interactive, interactive_output, HBox, VBox, IntSlider, BoundedIntText, Play, jslink
 #import bqplot as plt
 import scipy as sp
+import scipy.linalg
 import matplotlib.animation as animation
 
     
@@ -48,7 +49,7 @@ def smoother(max_distort=50):
         re_vel[-1] = vel_hist[i]
         re_spin[-1] = spin_hist[i]
         dpos = re_vel[-1] * ddt
-        drot = [sp.linalg.expm(s * ddt) for s in re_spin[-1]] # incremental rotation during each frame
+        drot = [scipy.linalg.expm(s * ddt) for s in re_spin[-1]] # incremental rotation during each frame
         # Note that rotation was not computed during the simulation because it was not needed to determine point of collision or outgoing velocity and spin.  So this is the first time rotation is computed.
 
         for f in range(num_frames[i]):
