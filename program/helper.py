@@ -328,7 +328,7 @@ def listify(x):
         return [x]
     
 ### Helpers for stochastic process and graphs
-import networkx as nx
+#import networkx as nx
 def make_stochastic(A, orient='col'):    
     if orient == 'row':
         T = A.T
