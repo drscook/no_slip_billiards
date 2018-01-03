@@ -1,7 +1,7 @@
 from helper import *
 
-from ipywidgets import interactive, interactive_output, HBox, VBox, IntSlider, BoundedIntText, Play, jslink
-import bqplot as plt
+#from ipywidgets import interactive, interactive_output, HBox, VBox, IntSlider, BoundedIntText, Play, jslink
+#import bqplot as plt
 import scipy as sp
 import matplotlib.animation as animation
 
