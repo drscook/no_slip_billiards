@@ -76,13 +76,20 @@ class WallClass():
             raise Exception('Thermal law not yet implemented')
         else:
             raise Exception('Unknown pw collision law {}'.format(self.collision_law))
-    
+
+        if self.type == 'cone': # if particle gets too close to cone vertex, re-randomize position
+            h = part.radius[p] / self.sinva  #closest particle can get to vertex of the cone
+            dx = part.pos[p] - self.pos
+            if dx.dot(dx) < 1.001*h**2:
+                part.randomize_pos(p)
+
+            
 class FlatWall(WallClass):
-    def __init__(self, pos, half_length, half_width, normal=None, basis=None, name='flat', collision_law='specular'):
+    def __init__(self, pos, half_length, normal=None, basis=None, name='flat', collision_law='specular'):
+        self.type = 'flat'
         self.name = name
         self.pos = np.asarray(pos).astype(float)
-        self.half_length = half_length
-        self.half_width = half_width
+        
         if normal is not None:
             self.normal_static = munit(normal).astype(float)  # defined in helper
 
@@ -99,17 +106,30 @@ class FlatWall(WallClass):
         else:
             raise Exception("Shape mismatch: position {} and normal {}".format(pos.shape, normal.shape))
 
+        h = listify(half_length)
+        if len(h) == 1:
+            self.half_length = np.ones(self.dim) * h[0]
+        elif len(h) == self.dim:
+            self.half_length = np.asarray(h)
+        else:
+            raise Exception('Must specify a single length or {} lengths for flat wall'.format(self.dim))
+
         self.collision_law = collision_law
+        self.parametrize()
         
     def parametrize(self):
-        grid_u = np.linspace(-1, 1, 10)
-        grid_v = np.linspace(-1, 1, 10)
-        grid_u, grid_v = np.meshgrid(grid_u, grid_v)
-        vect_u = self.basis[:,0] * self.half_length
-        vect_v = self.basis[:,1] * self.half_width
-        self.x = vect_u[0]*grid_u + vect_v[0]*grid_v + self.pos[0]
-        self.y = vect_u[1]*grid_u + vect_v[1]*grid_v + self.pos[1]
-        self.z = vect_u[2]*grid_u + vect_v[2]*grid_v + self.pos[2]
+        num_grid_points = 10
+        grid = [np.linspace(-1, 1, num_grid_points) for d in range(self.dim-1)]
+        grid = np.meshgrid(*grid)
+
+        self.param = []
+        for d in range(self.dim):
+            x = self.basis[d,0] * grid[0] * self.half_length[d]
+            for b in range(1,self.dim-1):
+                x += self.basis[d,b] * grid[b] * self.half_length[d]
+            x += self.pos[d]
+            self.param.append(x)
+        self.param = np.array(self.param)
         
     def normal(self, pos=None):
         return self.normal_static
@@ -133,6 +153,7 @@ class FlatWall(WallClass):
     
 class ConeWall(WallClass):
     def __init__(self, pos=[0,0,0], axis=[0,0,1], name='cone', height=np.inf, vertex_angle=np.pi/3, collision_law='specular'):
+        self.type = 'cone'
         self.name = name
         self.dim = 3
         self.pos = np.asarray(pos).astype(float)
@@ -151,13 +172,13 @@ class ConeWall(WallClass):
         grid_theta = np.linspace(0, 2 * np.pi, 20)
         grid_u = np.linspace(0, self.height, 10)        
         grid_theta, grid_u = np.meshgrid(grid_theta, grid_u)
-        self.x = grid_u * self.tanva * np.cos(grid_theta)
-        self.y = grid_u * self.tanva * np.sin(grid_theta)
-        self.z = grid_u
+        x = grid_u * self.tanva * np.cos(grid_theta)
+        y = grid_u * self.tanva * np.sin(grid_theta)
+        z = grid_u
 
-        c = np.array([self.x, self.y, self.z])
+        c = np.array([x, y, z])
         c = np.rollaxis(c,0,-1)
-        self.x, self.y, self.z = lab_frame.dot(c) + self.pos[:,np.newaxis,np.newaxis]
+        self.param = lab_frame.dot(c) + self.pos[:,np.newaxis,np.newaxis]
 
 
     def normal(self, pos=[0,0,20]):
@@ -212,7 +233,7 @@ class ConeWall(WallClass):
     
     
 class Particles():
-    def __init__(self, wall, num=5, mass=3, gamma='uniform', radius=2, temp=10, vel=None, pos=None, spin=None, rot=None, collision_law='specular'):
+    def __init__(self, wall, num=5, mass=3, gamma='uniform', radius=2, temp=10, vel=None, pos=None, spin=None, orient=None, collision_law='specular'):
         self.dim = wall[0].dim
         self.num = num
         self.collision_law = collision_law
@@ -234,7 +255,7 @@ class Particles():
         self.set_init_vel(vel)
         self.set_init_pos(pos)        
         self.set_init_spin(spin)
-        self.set_init_rot(rot)        
+        self.set_init_orient(orient)        
         
     def set_param(self, key, val, ndim=0):
         msg = 'Trying to initialize {}.'.format(key)
@@ -272,16 +293,16 @@ class Particles():
         if np.isinf(self.vel).any():
             raise Exception('Could not initialize velocity')
         
-    def set_init_rot(self, rot=None):
-        rot = np.asarray(rot)
-        self.rot = np.full([self.num,self.dim,self.dim], np.inf)
+    def set_init_orient(self, orient=None):
+        orient = np.asarray(orient)
+        self.orient = np.full([self.num,self.dim,self.dim], np.inf)
         for p in range(self.num):            
             try:
-                self.rot[p] = rot[p]
+                self.orient[p] = orient[p]
             except:
-                self.rot[p] = make_skew_symmetric(np.ones([self.dim,self.dim])).astype(float)
-        if np.isinf(self.rot).any():
-            raise Exception('Could not initialize rotation')
+                self.orient[p] = make_skew_symmetric(np.ones([self.dim,self.dim])).astype(float)
+        if np.isinf(self.orient).any():
+            raise Exception('Could not initialize orientation')
 
     def set_init_spin(self, spin=None):
         spin = np.asarray(spin)
@@ -441,22 +462,22 @@ def init(wall, part):
     for w in wall:
         if ((w.dim != dim) | (len(w.pos) != dim)):
             raise Exception('Wall dim mismatch')
-    if ((part.dim != dim) | (part.pos.shape[1] != dim) | (part.vel.shape[1] != dim) | (part.rot.shape[1] != dim) | (part.rot.shape[2] != dim) | (part.spin.shape[1] != dim) | (part.spin.shape[2] != dim)):
+    if ((part.dim != dim) | (part.pos.shape[1] != dim) | (part.vel.shape[1] != dim) | (part.orient.shape[1] != dim) | (part.orient.shape[2] != dim) | (part.spin.shape[1] != dim) | (part.spin.shape[2] != dim)):
         raise Exception('Particle dim mismatch')
 
-    global t, t_hist, col_type_hist, pos_hist, vel_hist, rot_hist, spin_hist, pp_col_mask, pw_col_mask
+    global t, t_hist, col_type_hist, pos_hist, vel_hist, orient_hist, spin_hist, pp_col_mask, pw_col_mask
     t = 0
     t_hist = np.zeros(max_steps+1)
     col_type_hist = []
 
     pos_hist = np.zeros(np.insert(part.pos.shape, 0, max_steps+1))
     vel_hist = np.zeros(np.insert(part.vel.shape, 0, max_steps+1))
-    rot_hist = np.zeros(np.insert(part.rot.shape, 0, max_steps+1))
+    orient_hist = np.zeros(np.insert(part.orient.shape, 0, max_steps+1))
     spin_hist = np.zeros(np.insert(part.spin.shape, 0, max_steps+1))
 
     pos_hist[0] = part.pos.copy()
     vel_hist[0] = part.vel.copy()
-    rot_hist[0] = part.rot.copy()
+    orient_hist[0] = part.orient.copy()
     spin_hist[0] = part.spin.copy()
 
     pp_col_mask = np.full([part.num, part.num], False, dtype='bool')
@@ -465,7 +486,7 @@ def init(wall, part):
             
 def do_the_evolution():
     global wall, part, t, pp_col_mask, pw_col_mask
-    global t_hist, col_type_hist, pos_hist, vel_hist, rot_hist, spin_hist
+    global t_hist, col_type_hist, pos_hist, vel_hist, orient_hist, spin_hist
         
     dt_pp = part.pp_col_times(pp_col_mask)
     dt_pw = np.array([w.pw_col_times(part, pw_col_mask[:,i]) for (i,w) in enumerate(wall)]).T
@@ -496,10 +517,10 @@ def do_the_evolution():
     
     t += dt
     part.pos += part.vel * dt
-    ### We don't need to compute the rotational orientation at this point.  It does not affect collision points, times, or post-collision velocities.  We'll do this later when we aniamte.
+    ### We don't need to compute the orientational orientation at this point.  It does not affect collision points, times, or post-collision velocities.  We'll do this later when we aniamte.
     # for p in range(part.num):
-    #     drot = linalg.expm(part.spin[p] * dt)        
-    #     part.rot[p] = part.rot[p].dot(drot)
+    #     dorient = linalg.expm(part.spin[p] * dt)        
+    #     part.orient[p] = part.orient[p].dot(dorient)
 
     col_types = []
     for p in np.nonzero(cmplx_mask)[0]:
@@ -522,7 +543,7 @@ def do_the_evolution():
         if len(ws) == 1: # single wall collision
             w = ws[0]
             wall[w].resolve_collision(part, p)
-
+            
         else: # multiple walls (corner collision)
             def vel_normal():
                 '''
@@ -572,5 +593,5 @@ def do_the_evolution():
                     
     pos_hist[step+1] = part.pos.copy()
     vel_hist[step+1] = part.vel.copy()
-    rot_hist[step+1] = part.rot.copy()
+    orient_hist[step+1] = part.orient.copy()
     spin_hist[step+1] = part.spin.copy()
