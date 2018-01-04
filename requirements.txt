@@ -1,0 +1,7 @@
+numpy>=1.11
+scipy>=0.18
+ipywidgets>=7.0
+matplotlib>=2.1
+bqplot>=0.10
+plotly>=2.2
+jupyter_contrib_nbextensions
