@@ -343,6 +343,7 @@ class Particles():
         attempt = 0
         while success == False:
             if attempt >= max_attempts:
+                print(self.pos)
                 raise Exception('Could not place particle {}'.format(p))
             c = np.array([np.random.uniform(bb[0]+r, bb[1]-r) for bb in bounding_box])
             self.pos[p] = lab_frame.dot(c)
@@ -482,35 +483,26 @@ def init(wall, part):
 
     pp_col_mask = np.full([part.num, part.num], False, dtype='bool')
     pw_col_mask = np.full([part.num, len(wall)], False, dtype='bool')
-
+    
+    
             
 def do_the_evolution():
+    step_success = False
     global wall, part, t, pp_col_mask, pw_col_mask
     global t_hist, col_type_hist, pos_hist, vel_hist, orient_hist, spin_hist
-        
+
     dt_pp = part.pp_col_times(pp_col_mask)
     dt_pw = np.array([w.pw_col_times(part, pw_col_mask[:,i]) for (i,w) in enumerate(wall)]).T
-    #print("##########################")
-    #print("STEP %d"%step)
-    #display(dt_pp)
-    #display(dt_pw)
-       
-    dt = min(dt_pp.min(), dt_pw.min())        
-    #print(dt)
-
+    dt = min(dt_pp.min(), dt_pw.min())
+    if np.isinf(dt):
+        raise Exception("No future collisions detected")
         
     tol = 1e-6
     pp_col_mask = (dt_pp-dt) < tol
     pp_counts = pp_col_mask.sum(axis=1)
     pw_col_mask = (dt_pw-dt) < tol
     pw_counts = pw_col_mask.sum(axis=1)
-            
-    #display(pp_col_mask)
-    #display(pw_col_mask)
-    #display(part.pos)
-    #display(part.vel)
-    
- 
+
     cmplx_A = (pp_counts >= 2)
     cmplx_B = (pp_counts >= 1) & (pw_counts >= 1)
     cmplx_mask = cmplx_A | cmplx_B
@@ -583,9 +575,8 @@ def do_the_evolution():
             #print(msg)
             
         success = part.check_positions()
-        if not success:
-            raise Exception(' Failure at step %d'%step)
-
+        if not success:            
+            raise Exception("Either a particle escaped or 2 particles overlap")
     
     t_hist[step+1] = t
     col_type_hist.append(col_types)
@@ -595,3 +586,29 @@ def do_the_evolution():
     vel_hist[step+1] = part.vel.copy()
     orient_hist[step+1] = part.orient.copy()
     spin_hist[step+1] = part.spin.copy()
+    
+    
+def error_report():
+    print("An error occurred at step {}.  Current state below.  (orientation may not be correct - computed after simulation completes)".format(str(step)))
+    for p in range(part.num):
+        print("Particle {}".format(p))
+        print("Position")
+        print(part.pos[p].tolist())
+        print("Velocity")
+        print(part.vel[p].tolist())
+        print("Orientation")
+        print(part.orient[p].tolist())
+        print("Spin")
+        print(part.spin[p].tolist())
+    print("pp_col_mask")
+    print(pp_col_mask)
+    print("pw_col_mask")
+    print(pw_col_mask)
+    print("dt_pp")
+    print(dt_pp)
+    print("dt_pw")
+    print(dt_pw)
+    print("dt")
+    print(dt)
+    print("collisions this step")
+    print(col_types)
