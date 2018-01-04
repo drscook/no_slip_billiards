@@ -2,7 +2,7 @@
 
 # no_slip_billiards
 
-This program simulates the no-slip billiard dynamical systems introduced by Groomhead and Gutkin and extended by Chris Cox and Renato Feres
+This program simulates the no-slip billiard dynamical systems introduced by Groomhead and Gutkin and extended by Chris Cox and Renato Feres.  See:
 
 - http://www.sciencedirect.com/science/article/pii/016727899390205F?via%3Dihub
 - https://arxiv.org/abs/1602.01490
