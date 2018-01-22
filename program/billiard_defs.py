@@ -41,6 +41,30 @@ def cross_subtract(u, v=None):
     w = u[np.newaxis,:] - v[:,np.newaxis]
     return w
 
+def v_to_m(v):
+    l = len(v)
+    # l = d(d-1) -> d**2 - d - 2l = 0
+    d = (1 + np.sqrt(1 + 8*l)) / 2
+    if d % 1 == 0:
+        d = int(d)
+    else:
+        raise Exception('vector {} of length {} converts to dim = {:.2f}.  Not integer.'.format(v,l,d))
+    M = np.zeros([d,d])
+    idx = np.triu_indices_from(M,1)
+    w = [x*(-1)**(i+1) for (i,x) in enumerate(v)]
+    w = w[::-1]
+    M[idx] = w
+    M = make_skew_symmetric(M)
+    return M.astype(float)
+
+def m_to_v(M):
+    idx = np.triu_indices_from(M,1)
+    w = M[idx]
+    w = w[::-1]
+    v = [x*(-1)**(i+1) for (i,x) in enumerate(w)]
+    return np.array(v).astype(float)
+
+
 class WallClass():
     def pw_specular_law(self, part, p):
         """
@@ -280,65 +304,70 @@ class Particles():
         #print(msg)
         return success
     
+    def expand(self, X, L):
+        if X is None:
+            X = np.empty([0]*L)
+        else:
+            X = np.asarray(X)
+            for i in range(L-X.ndim):
+                X = X[np.newaxis,:]
+        return X
        
     def set_init_vel(self, vel=None):
-        vel = np.asarray(vel)
-        self.vel = np.full([self.num,self.dim], np.inf)
-        for p in range(self.num):
-            try:
-                self.vel[p] = vel[p]
-            except:
-                sigma = np.sqrt(BOLTZ_CONST * self.temp[p] / self.mass[p])
-                self.vel[p] = np.random.normal(0,sigma,size=[self.dim])
+        vel = self.expand(vel, 2)
+        self.vel = np.full([self.num, self.dim], np.inf)
+        p = 0
+        for v in vel:
+            self.vel[p] = v.copy()
+            p += 1
+        for q in range(p, self.num):
+            sigma = np.sqrt(BOLTZ_CONST * self.temp[q] / self.mass[q])
+            self.vel[q] = np.random.normal(0,sigma,size=[self.dim])
         if np.isinf(self.vel).any():
             raise Exception('Could not initialize velocity')
         
     def set_init_orient(self, orient=None):
-        orient = np.asarray(orient)
-        self.orient = np.full([self.num,self.dim,self.dim], np.inf)
-        for p in range(self.num):            
-            try:
-                self.orient[p] = orient[p]
-            except:
-                self.orient[p] = make_skew_symmetric(np.ones([self.dim,self.dim])).astype(float)
+        orient = self.expand(orient, 3)
+        self.orient = np.full([self.num, self.dim, self.dim], np.inf)
+        p = 0
+        for o in orient:
+            self.orient[p] = make_skew_symmetric(o)
+            p += 1
+        for q in range(p, self.num):
+            self.orient[q] = make_skew_symmetric(np.zeros([self.dim, self.dim])).astype(float)
         if np.isinf(self.orient).any():
             raise Exception('Could not initialize orientation')
 
     def set_init_spin(self, spin=None):
-        spin = np.asarray(spin)
-        self.spin = np.full([self.num,self.dim,self.dim], np.inf)
-        for p in range(self.num):            
-            try:
-                self.spin[p] = spin[p]
-            except:
-                sigma = np.sqrt(BOLTZ_CONST * self.temp[p] / self.mom_inert[p])
-                self.spin[p] = make_skew_symmetric(np.random.normal(0,sigma,size=[self.dim,self.dim]))
+        spin = self.expand(spin, 3)
+        self.spin = np.full([self.num, self.dim, self.dim], np.inf)
+        p = 0
+        for s in spin:
+            self.spin[p] = make_skew_symmetric(s)
+            p += 1
+        for q in range(p, self.num):
+            sigma = np.sqrt(BOLTZ_CONST * self.temp[q] / self.mom_inert[q])
+            self.spin[q] = make_skew_symmetric(np.random.normal(0,sigma,size=[self.dim,self.dim]))
         if np.isinf(self.spin).any():
             raise Exception('Could not initialize spin')
 
 
     def set_init_pos(self, pos=None):
-        pos = np.asarray(pos)
+        pos = self.expand(pos, 2)
         self.pos = np.full([self.num,self.dim], np.inf)
-        for p in range(self.num):
-            try:
-                guess = pos[p]
-            except:
-                guess = None
-            success = self.randomize_pos(p, guess=guess)
+        p = 0
+        for x in pos:
+            self.pos[p] = x.copy()
+            p += 1
+        for q in range(p, self.num):
+            self.randomize_pos(q)
         success = self.check_positions()
         if not success:
             raise Exception('Could not initialize position')
                         
-    def randomize_pos(self, p, guess=None):
+    def randomize_pos(self, p):
         r = self.radius[p]
         success = False
-        try:
-            if len(guess) == self.dim:
-                self.pos[p] = guess
-                success = self.check_positions(p)
-        except:
-            pass
         max_attempts = 50
         attempt = 0
         while success == False:
@@ -347,8 +376,6 @@ class Particles():
                 raise Exception('Could not place particle {}'.format(p))
             c = np.array([np.random.uniform(bb[0]+r, bb[1]-r) for bb in bounding_box])
             self.pos[p] = lab_frame.dot(c)
-            #with warnings.catch_warnings():
-            #    warnings.simplefilter('ignore', RuntimeWarning)
             success = self.check_positions(p)
             attempt += 1
         return success
@@ -459,6 +486,10 @@ class Particles():
             
 
 def init(wall, part):
+    arrayify = ['pos', 'vel', 'orient', 'spin', 'radius', 'gamma', 'mass', 'temp']
+    for attr in arrayify:
+        setattr(part, attr, np.asarray(getattr(part, attr)))
+
     dim = part.dim
     for w in wall:
         if ((w.dim != dim) | (len(w.pos) != dim)):

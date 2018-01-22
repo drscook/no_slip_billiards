@@ -15,9 +15,9 @@ import ipywidgets as widg
 import matplotlib.pyplot as plt
 #from mpl_toolkits.mplot3d import Axes3D
 import IPython.display as ipd
-import plotly.offline as py
-import plotly.graph_objs as go
-py.init_notebook_mode(connected=True)
+#import plotly.offline as py
+#import plotly.graph_objs as go
+#py.init_notebook_mode(connected=True)
 
 #import seaborn as sns
 #sns.set_palette('deep')
