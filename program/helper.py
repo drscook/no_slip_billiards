@@ -131,6 +131,21 @@ def make_skew_symmetric(A):
     U = np.triu(A,1)
     return U - U.T
 
+def make_special_orthogonal(A):
+    """
+    Convert A into a rotation matrix
+    """
+    A = np.asarray(A)
+    sh = A.shape
+    if (len(sh) == 2) & (sh[0] == sh[1]):
+        k = (np.linalg.det(A))**(1/sh[0])
+        if abs(k) < 1e-4:
+            raise Exception('A has determinant 0 - can not be a rotation')
+        U = (1/k) * A
+    else:
+        raise Exception('A must be a square matrix')
+    return U
+
 
 ### The functions parse_ax, mdot, mdist, mmag, munit, make_orth_norm_basis work together to do basic linear algebra jobs.  In each one, the user specifies a specific axis of an array to treat as special.  Ex: Suppose A.shape=[a_0,a_1,...,a_m] and axis 1 is specified.  We now think of A as an array of points in dimension a_1 with shape [a_0,a_2,...,a_m]
 def parse_ax(ax):

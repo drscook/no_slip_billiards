@@ -58,7 +58,7 @@ def smoother(max_distort=50):
             re_t.append(re_t[-1] + ddt)
             re_pos.append(re_pos[-1] + dpos)
             re_vel.append(re_vel[-1])
-            w = [r.dot(s) for (r,s) in zip(re_orient[-1],dorient)] # rotates each particle the right amount
+            w = [do.dot(o) for (do,o) in zip(dorient,re_orient[-1])] # rotates each particle the right amount
             re_orient.append(np.array(w))
             re_spin.append(re_spin[-1])
 

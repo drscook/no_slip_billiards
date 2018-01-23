@@ -114,16 +114,13 @@ class FlatWall(WallClass):
         self.name = name
         self.pos = np.asarray(pos).astype(float)
         
-        if normal is not None:
-            self.normal_static = munit(normal).astype(float)  # defined in helper
-
-        if basis is not None:
-            self.basis = munit(basis, ax=0)
-            self.normal_static = self.basis[:,-1]
-        else:
-            self.basis = make_orth_norm_basis(self.normal_static)  # defined in helper
-            self.basis[[0,-1]] = self.basis[[-1,0]]
-            self.basis = self.basis.T  # basis vectors now in written down columns, normal rightmost
+        # normal vector must be row 0 of basis
+        if basis is None:
+            if normal is None:
+                raise Exception('Must specify either basis or normal')
+            basis = [normal]
+        self.basis = make_orth_norm_basis(basis)
+        self.normal_static = self.basis[0]
             
         if(len(self.pos) == len(self.normal_static)):
             self.dim = len(self.pos)
@@ -143,7 +140,8 @@ class FlatWall(WallClass):
         
     def parametrize(self):
         num_grid_points = 10
-        grid = [np.linspace(-1, 1, num_grid_points) for d in range(self.dim-1)]
+        grid = [np.linspace(-1, 1, num_grid_points) for d in range(self.dim)]
+        
         grid = np.meshgrid(*grid)
 
         self.param = []
@@ -184,8 +182,8 @@ class ConeWall(WallClass):
         self.axis = munit(axis).astype(float) # defined in helper
         self.height = height
         self.basis = make_orth_norm_basis(self.axis) # defined in helper
-        self.basis[[0,-1]] = self.basis[[-1,0]]
-        self.basis = self.basis.T  # basis vectors now in written down columns, axis rightmost
+        #self.basis[[0,-1]] = self.basis[[-1,0]]
+        #self.basis = self.basis.T  # basis vectors now in written down columns, axis rightmost
         self.vertex_angle = vertex_angle
         self.sinva = np.sin(vertex_angle)
         self.cosva = np.cos(vertex_angle)
@@ -196,13 +194,12 @@ class ConeWall(WallClass):
         grid_theta = np.linspace(0, 2 * np.pi, 20)
         grid_u = np.linspace(0, self.height, 10)        
         grid_theta, grid_u = np.meshgrid(grid_theta, grid_u)
-        x = grid_u * self.tanva * np.cos(grid_theta)
-        y = grid_u * self.tanva * np.sin(grid_theta)
-        z = grid_u
-
-        c = np.array([x, y, z])
-        c = np.rollaxis(c,0,-1)
-        self.param = lab_frame.dot(c) + self.pos[:,np.newaxis,np.newaxis]
+        x = grid_u
+        y = grid_u * self.tanva * np.cos(grid_theta)
+        z = grid_u * self.tanva * np.sin(grid_theta)
+        c = np.array([x, y, z]).T
+        #c = np.rollaxis(c,0,-1)
+        self.param = c.dot(lab_frame) + self.pos[:,np.newaxis,np.newaxis]
 
 
     def normal(self, pos=[0,0,20]):
@@ -210,28 +207,22 @@ class ConeWall(WallClass):
         if pos.ndim > 1:
             raise Exception('I produce normals for the cone one point at a time.')
         dx = pos - self.pos
-        px, py, pz = (dx.dot(self.basis)).T # change to cone coordinates, z is along axis
-        sx = abs(px) < 1e-4
-        sy = abs(px) < 1e-4
-        if sx & sy:
-            nx = 0
-            ny = 0
-            nz = 1
-        elif sx:
-            nx = 0
-            ny = -1 * self.cosva
-            nz = self.sinva
-        elif sy:
-            nx = -1 * self.cosva
-            ny = 0
-            nz = self.sinva
+        c = dx.dot(self.basis.T) # change to cone coordinates, z is along axis
+        s = abs(c) < 1e-4
+        if s[1] & s[2]:
+            n = [1, 0 ,0]
+        elif s[1]:
+            n = [self.sinva, 0, -1 * self.cosva]
+        elif s[2]:
+            n = [self.sinva, -1 * self.cosva, 0]
         else:
-            w = py / px
-            nx = -1 * self.cosva * np.sign(px) / np.sqrt(1+w**2)
-            ny = -1 * self.cosva * np.sign(py) / np.sqrt(1+(1/w)**2)
-            nz = self.sinva
-        n = np.array([nx,ny,nz])
-        return (self.basis).dot(n)
+            w = p[1] / p[2]
+            n = [self.sinva
+                ,-1 * self.cosva * np.sign(c[1]) / np.sqrt(1+(1/w)**2)
+                ,-1 * self.cosva * np.sign(c[2]) / np.sqrt(1+w**2)
+                ]
+        n = np.asarray(n)
+        return n.dot(self.basis)
     
     def pw_dist(self, part, p):
         dx = part.pos[p] - self.pos
@@ -261,9 +252,9 @@ class Particles():
         self.dim = wall[0].dim
         self.num = num
         self.collision_law = collision_law
-        self.set_param('mass', mass, ndim=0)
-        self.set_param('radius', radius, ndim=0)
-        self.set_param('temp', temp, ndim=0)
+        self.set_param('mass', mass)
+        self.set_param('radius', radius)
+        self.set_param('temp', temp)
         
         if(gamma == 'uniform'):
             gamma = np.sqrt(2/(2+self.dim))
@@ -273,48 +264,38 @@ class Particles():
             gamma = np.asarry(gamma)
             if np.any((gamma < 0) | (gamma > np.sqrt(2/dim))):
                 raise Exception('illegal mass distribution parameter {}'.format(gamma))
-        self.set_param('gamma', gamma, ndim=0)
+        self.set_param('gamma', gamma)
         self.mom_inert = self.mass * (self.gamma * self.radius)**2
 
         self.set_init_vel(vel)
         self.set_init_pos(pos)        
         self.set_init_spin(spin)
         self.set_init_orient(orient)        
-        
-    def set_param(self, key, val, ndim=0):
-        msg = 'Trying to initialize {}.'.format(key)
-        success = False
-        target_sh = [self.dim]*ndim
-        target_sh[0:0] = [self.num]
-        msg = msg + '  Shape should be {}.'.format(target_sh)
-        val = np.asarray(val).astype(float)
-        if val.ndim == 0:
-            val = np.tile(val, self.num)
-            msg = msg + '  Scalar detected.  Expanding first dim to num particles={}.'.format(self.num)
-        for _ in range(ndim-(val.ndim-1)):
-            msg = msg + '  Apending new dimension and tiling to length dim={}.'.format(self.sim)
-            val = np.tile(val[...,np.newaxis], self.dim)
-        success = np.array_equal(val.shape, target_sh)
-        if success:
-            setattr(self, key, val)
-            msg = msg + '  Success!!\n'
-        else:
-            msg = msg + '  Failed!!\n'
-            raise Exception(msg)
-        #print(msg)
-        return success
-    
-    def expand(self, X, L):
+
+    def expand(self, X, ndim):
         if X is None:
-            X = np.empty([0]*L)
+            X = np.empty([0])
         else:
-            X = np.asarray(X)
-            for i in range(L-X.ndim):
+            X = np.asarray(listify(X))
+            for i in range(ndim - X.ndim):
                 X = X[np.newaxis,:]
         return X
+        
+    def set_param(self, key, val):
+        val = self.expand(val, ndim=1)
+        X = np.full(self.num, np.inf)
+        p = 0
+        for v in val:
+            X[p] = v
+            p += 1
+        for q in range(p, self.num):
+            X[q] = val[-1]
+        if np.isinf(X).any():
+            raise Exception('Could not initialize {}'.format(key))
+        setattr(self, key, val)
        
     def set_init_vel(self, vel=None):
-        vel = self.expand(vel, 2)
+        vel = self.expand(vel, ndim=2)
         self.vel = np.full([self.num, self.dim], np.inf)
         p = 0
         for v in vel:
@@ -327,19 +308,22 @@ class Particles():
             raise Exception('Could not initialize velocity')
         
     def set_init_orient(self, orient=None):
-        orient = self.expand(orient, 3)
+        orient = self.expand(orient, ndim=3)
         self.orient = np.full([self.num, self.dim, self.dim], np.inf)
         p = 0
         for o in orient:
-            self.orient[p] = make_skew_symmetric(o)
+            D = np.linalg.det(o)
+            if abs(D-1) > 1e-4:
+                raise Exception('orientation matrix must have determinant 1')
+            self.orient[p] = o
             p += 1
         for q in range(p, self.num):
-            self.orient[q] = make_skew_symmetric(np.zeros([self.dim, self.dim])).astype(float)
+            self.orient[q] = np.eye(self.dim, self.dim).astype(float)
         if np.isinf(self.orient).any():
             raise Exception('Could not initialize orientation')
 
     def set_init_spin(self, spin=None):
-        spin = self.expand(spin, 3)
+        spin = self.expand(spin, ndim=3)
         self.spin = np.full([self.num, self.dim, self.dim], np.inf)
         p = 0
         for s in spin:
@@ -351,10 +335,9 @@ class Particles():
         if np.isinf(self.spin).any():
             raise Exception('Could not initialize spin')
 
-
     def set_init_pos(self, pos=None):
-        pos = self.expand(pos, 2)
-        self.pos = np.full([self.num,self.dim], np.inf)
+        pos = self.expand(pos, ndim=2)
+        self.pos = np.full([self.num, self.dim], np.inf)
         p = 0
         for x in pos:
             self.pos[p] = x.copy()
