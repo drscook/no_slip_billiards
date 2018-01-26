@@ -292,7 +292,7 @@ class Particles():
             X[q] = val[-1]
         if np.isinf(X).any():
             raise Exception('Could not initialize {}'.format(key))
-        setattr(self, key, val)
+        setattr(self, key, X)
        
     def set_init_vel(self, vel=None):
         vel = self.expand(vel, ndim=2)
