@@ -5,5 +5,7 @@ Implements billiard dynamics of many spherical particles in arbitrary dimension 
 Currently supports the standard specular collision and the no-slip collision law.
 
 Dr. Scott Cook
+
 Tarleton State University
+
 Dept of Math
