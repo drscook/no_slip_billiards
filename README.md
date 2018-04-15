@@ -1,4 +1,4 @@
-[![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/drscook/no_slip_billiards/master)
+[![Binder](https://mybinder.org/badge.svg)](https://hub.mybinder.org/user/drscook-no_slip_billiards-tkoolex0/tree)
 
 # no_slip_billiards
 
