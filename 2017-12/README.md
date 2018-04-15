@@ -1,3 +1,6 @@
+## This is an older version with gpu support.  Recommend new version.
+
+
 [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/drscook/no_slip_billiards/master)
 
 # no_slip_billiards
