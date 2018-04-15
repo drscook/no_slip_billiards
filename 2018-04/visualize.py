@@ -12,6 +12,51 @@ import io
 import base64
 rc('animation', html='jshtml')
 
+
+def draw(s=0):
+    get_mesh()
+    s %= part.num_frames
+
+    if hasattr(part, 're_pos'):
+        x = part.re_pos[:s+1]
+    else:
+        x = part.pos_hist[:s+1]
+
+    if hasattr(part, 're_orient'):
+        o = part.re_orient[s]
+    else:
+        o = part.orient
+
+    translates = get_cell_translates(x)
+
+    fig, ax = plt.subplots(figsize=[8,8]);
+    for trans in translates:
+        for w in wall:
+            ax.plot(*((w.mesh+trans).T), color='black')
+            
+    for p in range(part.num):
+        ax.plot(*(x[:,p].T), color=part.clr[p])
+        ax.plot(*((part.mesh[p].dot(o[p].T) + x[-1,p]).T), color=part.clr[p])
+    ax.set_aspect('equal')
+
+
+def interactive_plot():
+    if part.dim != 2:
+        print('only works in 2D')
+        return 
+    
+    l = widgets.Layout(width='150px')
+    step_text = widgets.BoundedIntText(min=0, max=part.num_frames-1, value=0, layout=l)
+    step_slider = widgets.IntSlider(min=0, max=part.num_frames-1, value=0, readout=False, continuous_update=False, layout=l)
+    play_button = widgets.Play(min=0, max=part.num_frames-1, step=1, interval=500, layout=l)
+
+    widgets.jslink((step_text, 'value'), (step_slider, 'value'))
+    widgets.jslink((step_text, 'value'), (play_button, 'value'))
+    
+    img = widgets.interactive_output(draw, {'s':step_text})
+    wid = widgets.HBox([widgets.VBox([step_text, step_slider, play_button]), img])
+    display(wid)
+
 # Animations rely on FFMPEG or equivalent.
 
 def animate(frames=part.num_frames, run_time=5):
@@ -59,49 +104,7 @@ def play_video(fname):
          <source src="data:video/mp4;base64,{0}" type="video/mp4" />
          </video>'''.format(encoded.decode('ascii'))))
 
-def draw(s=0):
-    get_mesh()
-    s %= part.num_frames
 
-    if hasattr(part, 're_pos'):
-        x = part.re_pos[:s+1]
-    else:
-        x = part.pos_hist[:s+1]
-
-    if hasattr(part, 're_orient'):
-        o = part.re_orient[s]
-    else:
-        o = part.orient
-
-    translates = get_cell_translates(x)
-
-    fig, ax = plt.subplots(figsize=[8,8]);
-    for trans in translates:
-        for w in wall:
-            ax.plot(*((w.mesh+trans).T), color='black')
-            
-    for p in range(part.num):
-        ax.plot(*(x[:,p].T), color=part.clr[p])
-        ax.plot(*((part.mesh[p].dot(o[p].T) + x[-1,p]).T), color=part.clr[p])
-    ax.set_aspect('equal')
-
-
-def interactive_plot():
-    if part.dim != 2:
-        print('only works in 2D')
-        return 
-    
-    l = widgets.Layout(width='150px')
-    step_text = widgets.BoundedIntText(min=0, max=part.num_frames-1, value=0, layout=l)
-    step_slider = widgets.IntSlider(min=0, max=part.num_frames-1, value=0, readout=False, continuous_update=False, layout=l)
-    play_button = widgets.Play(min=0, max=part.num_frames-1, step=1, interval=500, layout=l)
-
-    widgets.jslink((step_text, 'value'), (step_slider, 'value'))
-    widgets.jslink((step_text, 'value'), (play_button, 'value'))
-    
-    img = widgets.interactive_output(draw, {'s':step_text})
-    wid = widgets.HBox([widgets.VBox([step_text, step_slider, play_button]), img])
-    display(wid)
     
 def get_cell_translates(x):
     cs = 2 * cell_size
