@@ -12,6 +12,8 @@ import io
 import base64
 rc('animation', html='jshtml')
 
+# Animations rely on FFMPEG or equivalent.
+
 def animate(frames=part.num_frames, run_time=5):
     get_mesh()
     frames %= part.num_frames
